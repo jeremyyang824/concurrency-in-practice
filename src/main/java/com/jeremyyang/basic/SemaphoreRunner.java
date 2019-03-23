@@ -1,4 +1,4 @@
-package com.jeremyyang;
+package com.jeremyyang.basic;
 
 import java.util.Collections;
 import java.util.HashSet;

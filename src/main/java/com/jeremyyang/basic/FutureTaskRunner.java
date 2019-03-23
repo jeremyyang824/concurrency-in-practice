@@ -1,4 +1,4 @@
-package com.jeremyyang;
+package com.jeremyyang.basic;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
