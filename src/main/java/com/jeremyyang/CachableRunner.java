@@ -144,8 +144,8 @@ public class CachableRunner {
     }
 
 
-    private final Computable<BigInteger, BigInteger[]> c = this::factor;
-    private final Computable<BigInteger, BigInteger[]> cache = new Memoizer<>(c);
+    private final Computable<BigInteger, BigInteger[]> computable = this::factor;
+    private final Computable<BigInteger, BigInteger[]> cachedComputable = new Memoizer<>(computable);
 
     public static void main(String[] args) {
         Random rand = new Random(47);
@@ -165,7 +165,7 @@ public class CachableRunner {
 
     public BigInteger[] cachableFactor(BigInteger i) {
         try {
-            return cache.compute(i);
+            return cachedComputable.compute(i);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new BigInteger[0];

@@ -34,8 +34,8 @@ public class FutureTaskRunner {
     }
 
     private ProductInfo loadProductInfo() throws DataLoadException {
-        // return () -> "TestProduct";
-        throw new DataLoadException(String.format("Executing error! Current thread is:[%s]", Thread.currentThread().getId()));
+        return () -> "TestProduct";
+        // throw new DataLoadException(String.format("Executing error! Current thread is:[%s]", Thread.currentThread().getId()));
     }
 
     interface ProductInfo {
