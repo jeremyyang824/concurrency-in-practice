@@ -1,0 +1,315 @@
+Kubernetes
+
+01. K8s介绍
+
+容器：本质上是运行在宿主机上被隔离的单个进程（同一内核）
+（“虚拟机抽象的是硬件资源；容器抽象的是操作系统”）
+
+容器关键技术
+
+namespace: 每个进程只能看到自己的系统视图（文件、进程、网络接口、主机名）
+
+cgroup: 限制进程能够使用的资源量（CPU、内存、网络带宽）
+
+Google开发了Borg/Omega的内部系统，十几年后于2014年开源了Kubernetes
+
+K8s核心组件
+
+控制面板（master）
+
+API Server
+
+etcd: 分布式存储，持久化集群配置
+
+Scheduler
+
+Controller Manager: 用于执行集群级别的功能（如复制组件、跟踪工作节点、处理失败节点）
+
+工作节点
+
+Container: 如Docker、rtk...
+
+Kubelete: 与API Server通信，管理节点容器
+
+Kube-proxy: 负责组件之间的负载均衡和网络流量
+
+K8s初识
+
+在K8s中，一切皆是resource
+
+K8s的基本原则之一：“声明性”的改变系统的期望状态。
+
+基本操作
+
+kubectl get {RESOURCE_TYPES}
+
+kubectl describe {RESOURCE_TYPE} {RESOURCE_NAME}
+
+kubectl create -f {YAML_FILE_NAME}
+
+kubectl apply -f {YAML_FILE_NAME}
+
+kubectl delete {RESOURCE_TYPE} -l {LABEL_KEY}={LABEL_VALUE}
+
+一句话基本概念：
+
+一个Pod是一组紧密相关的容器，它们总是一起运行在同一个工作节点上（以及同一个Linux namespace中）。
+每个Pod就像一个独立的逻辑机器，拥有自己的IP、主机名、进程等。
+
+每个Pod都有自己的IP，但这个IP是集群内部的（类型ClusterIP），不能从集群外部访问。
+Service用于以多种不同的方式公开Pod（例如类型LoadBalancer可以公开到集群外部）。
+另一方面，Pod的生命周期是短暂的（IP会变），而Service提供了一个不变的访问入口。
+
+我们一般不会直接创建Pod，而是通过ReplicationController/ReplicaSet来创建。
+ReplicationController用于确保集群中始终存在N个运行中的Pod。
+
+02. Pod
+
+Pod介绍
+
+Pod是一组并置的容器，是K8s的基本构建模块。当一个Pod包含多个容器时，这些容器总是运行在同一个工作节点上。
+
+容器通常被设计为只运行一个进程（子进程除外），然而我们需要一种更高级的结构来讲多个相关的容器绑定在一起，并作为一个单元进行管理，这就是Pod的设计目标。
+
+K8s通过配置Docker，来让一个Pod内的所有容器共享相同的Linux namespace。
+共享相同主机名、网络接口、IPC。也能共享相同进程空间（默认不开启）。但不共享文件系统空间。
+
+Pod定义与组成
+
+kubectl get po {POD_NAME} -o yaml
+
+kubectl logs {POD_NAME}
+
+metadata: 包括名称、命名空间、标签等
+
+spec: 包括pod的规格配置
+
+status: 包括pod的运行时信息（只读）
+
+
+
+标签（Label）
+
+标签是可以附加到资源的任意键值对
+
+标签选择器（Label Selector）允许我们选择标记有特定标签的资源子集
+
+examples:
+
+给node附加label（例如包含SSD的服务器），并通过nodeSelector将pod调度到特点的node子集
+
+注解（annotation）也是键值对，但仅用于描述
+
+探针（Probe）：HttpGet、Exec、TCP
+
+Liveness Probe:
+
+如果K8s判断Pod不存活，会删除并创建一个全新的容器
+
+delay、timeout、period、#failure
+
+K8s通过liveness probe来判断Pod是否存活（否则通过进程是否运行来判断）
+
+Readiness Probe: 
+
+如果K8s判断Pod未就绪，不会将该Pod公开给Service
+
+Pod的副本机制
+
+ReplicationController
+
+用于持续监控正在运行的Pod列表，并保证相应Pod的数目与“期望”相符
+
+ReplicationController基于“标签选择器”工作，即确保Pod数目与“标签选择器”匹配
+
+组成: label selector, replica count, pod template
+
+ReplicaSet：新一代的ReplicationController
+
+通常是在创建Deployment资源的时候自动创建
+
+提供了更强大的Label匹配方案
+
+Deployment
+
+"蓝绿部署"(Blue-Green Deployment) VS "灰度发布"(Gray Deployment)
+
+通过Deployment实现"滚动升级"(Rolling Update)
+
+查看Deployment滚动过程中的状态
+
+kubectl rollout status deployment {DEPLOYMENT_NAME}
+
+升级策略 (spec.strategy.type)
+
+RollingUpdate (默认)
+
+Recreate
+
+DaemonSet：每个Node上运行一个Pod
+
+Job：执行一个“可完成”的任务
+
+必须配置restartPolicy，默认的Always不适用于Job
+
+completions & parallelism
+
+CronJob：定期运行的Job，通过属性spec.schedule配置cron表达式
+
+03. Service
+
+K8s Service是一种为一组功能相同的Pod提供单一不变的接入点的资源
+
+Service通过label selector指向一组Pod
+
+spec.sessionAffinity: ClientIP 特定客户端请求始终指向同一个Pod
+
+K8s Service工作在传输层（TCP/UDP）
+
+如果一个服务指定了多个端口，必须给每个端口指定名字
+
+服务发现：
+
+环境变量：Pod上的进程可以通过环境变量获得命名空间内所有（先于该Pod创建）服务的IP和Port
+
+{SERVICE_NAME}_SERVICE_HOST
+
+{SERVICE_NAME}_SERVICE_PORT
+
+DNS：
+
+Pod根据spec.dnsPolicy属性（默认ClusterFirst）设置其DNS服务器
+
+kube-system命名空间下有个kube-dns的Pod用作集群内部DNS服务器，K8s通过修改每个Pod容器的/etc/resolv.conf设置来设置Pod的DNS服务器
+
+Cluster FQDN：{SERVICE_NAME}.{SERVICE_NAMESPACE}.svc.cluster.local
+
+Endpoint
+
+服务并不是和Pod直接相连的，而是通过一种中间资源——Endpoint
+
+Endpoint本质上就是一组（Pod的）IP/Port列表
+
+Service的类型(spec.type)，默认ClusterIP
+
+NodePort：K8s在所有WorkNode上保留一个（相同的）端口，并将传入的连接转发给该Service
+
+LoadBalancer：NodePort的扩展，拥有自己独一无二的IP地址（EXTERNAL-IP）
+
+Ingress：每个LoadBalancer Service需要自己的负载均衡器和独立IP，而Ingress只需要一个公网IP
+（注：Ingress是工作在应用层HTTP；且不通过spec.type来创建，而是独立类型的resource）
+
+04. Volume
+
+不同于其他顶层资源，Volume被定义为Pod的一部分（注意不是Container），和Pod共享相同的生命周期。
+（这意味着Pod启动时创建Volume，Pod删除时销毁Volume）
+
+Volume在Pod中声明，挂载到Container中使用
+
+类型
+
+emptyDir：用于存储临时数据、在同一个Pod中的Container之间共享数据...
+
+默认在Pod当前所在的work node的实际磁盘上创建，也可创建于内存中
+（volumes.emptyDir.medium: Memory）
+
+hostPath：指向work node上的文件或目录，并且在Pod中用相同的路径访问
+
+gitRepo：通过签出GitRepo的内容来初始化卷
+
+仅在Pod启动时从Git上签出内容（当向Git上推送新内容时，Pod中的Volume不会更新）
+
+nfs：挂在NFS共享卷到Pod中
+
+configMap、secret：将K8s的配置资源挂载到Pod中
+
+persistentVolumeClaim：一种预置或动态配置的持久存储
+
+PersistentVolume & PersistentVolumeClaim
+
+05. ConfigMap & Secret
+
+配置应用程序
+
+向容器传递命令行参数
+
+
+
+设置容器的环境变量
+
+
+
+挂载特殊卷ConfigMap
+
+本质上是键值对，通过环境变量或Volume文件传递给容器
+
+创建ConfigMap
+
+kubectl create configmap {NAME} --from-literal={KEY1}={VAL1} --from-literal={KEY2}={VAL2}
+
+kubectl create configmap {NAME} --from-file={FILE_PATH or DIR_PATH}
+
+如果路径是目录，则K8s会为目录中的每个文件单独创建条目
+
+传递ConfigMap给容器
+
+环境变量
+
+Volume
+
+只有通过ConfigMap并暴露为Volume的形式才可以达到配置"热更新"的效果
+
+Secret是一种特殊的ConfigMap，只会存储在节点内存中，不写入物理存储
+
+部署Pod时，如果容器Image位于私有仓库，K8s需要有拉取Image所需的证书
+
+步骤：
+
+创建包含DockerImage仓库证书的Secret
+
+kubectl create secret docker-registry {NAME} --docker-username={USERNAME} --docker-password={PASSWORD} --docker-email={EMAIL}
+
+Pod定义中的spec.imagePullSecrets引用该Secret
+
+
+
+07. K8s架构简介
+
+
+
+API Server是唯一和etcd通信的组件
+
+K8s系统组件间只能通过API Server通信，它们之间不会直接通信
+
+ControlPlane组件以及Kube-proxy可以直接部署在系统上或作为Pod来运行，Kubelet是唯一一直作为常规系统组件来运行的组件。
+
+Scheduler通过API Server更新Pod定义；然后API Server再通知Kubelet，Kubelet创建并运行调度到本节点的Pod容器。
+
+ControllerManager管理了多种Controller:
+(Controller执行一个"调和"循环，使得实际状态向期望状态收敛)
+
+Replication Controller
+
+ReplicaSet、DaemonSet、Job Controller
+
+StatefulSet Controller
+
+Node Controller
+
+Service Controller
+
+Endpoints Controller
+
+Namespace Controller
+
+PersistentVolume Controller
+
+......
+
+Kubelet持续监控容器，并向API Server报告它们的状态、事件和资源消耗
+
+Kube-proxy用于确保客户端可以通过API Server连接到Service
+
+每个kube-proxy都会让Service在自己运行的word node上可被寻址（原理是通过建立iptables规则）
+
+K8s网络工作原理
